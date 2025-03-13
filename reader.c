@@ -51,8 +51,6 @@ Lecture 8, Lecture 9, Lecture 10
                 pthread_cond_signal(&data_available); //signals other threads 
                 pthread_mutex_unlock(&buffer_mutex); //
             }
-
-            sleep(2); // to avoid busy-waiting
         }
 
         close(fd);
