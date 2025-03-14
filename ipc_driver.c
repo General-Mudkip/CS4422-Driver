@@ -25,7 +25,6 @@
 #define IOCTL_GET_READER_COUNT _IOR(MAJOR_DEVICE_NUMBER, 2, int) // get max reader count
 #define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(MAJOR_DEVICE_NUMBER, 3, int) // get the length of the current string in the buffer
 
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("");
 MODULE_DESCRIPTION("A simple IPC driver");
@@ -65,7 +64,7 @@ static int device_closed(struct inode *inode, struct file *file);
 static ssize_t device_read(struct file *file, char __user *user_buffer, size_t len, loff_t *offset);
 static ssize_t device_write(struct file *file, const char __user *user_buffer, size_t len, loff_t *offset);
 static ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t *offset);
-// static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 static int proc_read = 0;
 
@@ -78,7 +77,7 @@ static struct file_operations fops = {
     .release = device_closed,
     .read = device_read,
     .write = device_write,
-    // .unlocked_ioctl = device_ioctl,
+    .unlocked_ioctl = device_ioctl,
 };
 
 // Proc file operation structue
@@ -212,7 +211,12 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             }
             break;
 
-
+        default:
+            retval = -EINVAL;
+            break;
+    }
+    
+    return retval;
 }
 
 
