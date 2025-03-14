@@ -157,7 +157,7 @@ static void __exit ipc_proc_exit(void) {
 
 // Open func
 static int device_open(struct inode *inode, struct file *file) {
-    
+
     userspace_accesses++;
 
     printk(KERN_INFO "Device opened\n");
@@ -188,7 +188,7 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
     userspace_accesses++;
     reads_count++;         
     total_bytes_read += len;
-    
+
 
     if (data_written == 0) { // check for data
         printk(KERN_INFO "No data available to read\n");
@@ -240,12 +240,12 @@ static ssize_t device_write(struct file *file, const char __user *user_buffer, s
     // Decrement the semaphore by the max amount of readers.
     // This ensure that when the writer is writing, no readers are reading.
 
-   for (int i = 0; i < MAX_READER_COUNT; i++) {
+    for (int i = 0; i < MAX_READER_COUNT; i++) {
         if (down_interruptible(&rw_sem)) {
             printk(KERN_ALERT "Semaphore down interruptible failed\n");
             return -EINTR;
         }
-    
+
     }
 
     if (copy_from_user(shared_mem, user_buffer, bytes_to_write)) {
@@ -260,7 +260,7 @@ static ssize_t device_write(struct file *file, const char __user *user_buffer, s
     printk(KERN_INFO "Device wrote %zu bytes\n", bytes_to_write);
 
     memset(shared_mem + bytes_to_write, 0, SHM_SIZE - bytes_to_write); //clearing buffer
-    
+
     for (int i = 0; i < MAX_READER_COUNT; i++) {
         up(&rw_sem);
     }
@@ -275,7 +275,7 @@ ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t 
     if (proc_read) { //avoid reading the stats again if already read
         return 0;
     }
-    
+
     stats = kmalloc(1024, GFP_KERNEL); // dynamic memory allocation for the stats
     if (stats == NULL) {
         printk(KERN_ERR "Failed to allocate memory\n");
@@ -283,39 +283,39 @@ ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t 
     }
 
     // Calculating averages
-        if (reads_count > 0) {
-            avg_bytes_read = total_bytes_read / reads_count;
-        } 
+    if (reads_count > 0) {
+        avg_bytes_read = total_bytes_read / reads_count;
+    } 
 
-        if (writes_count > 0) {
-            avg_bytes_written = total_bytes_write / writes_count;
-        } 
+    if (writes_count > 0) {
+        avg_bytes_written = total_bytes_write / writes_count;
+    } 
 
     // Format the stats to display
     size_t formatted_len; 
     formatted_len = snprintf(stats, 1024,
-        "IPC Device Statistics:\n \n"
-        "1. Total user-space accesses: %lu \n"
-        "2. Total read operations: %lu \n"
-        "3. Total write operations: %lu \n"
-        "4. Total bytes read: %lu bytes \n"
-        "5. Total bytes written: %lu bytes \n"
-        "6. Average bytes per read: %lu bytes \n"
-        "7. Average bytes per write: %lu bytes \n"
-        "8. Maximum read size: %lu bytes\n"
-        "9. Minimum read size: %lu bytes\n \n"
-        "::::::::::::::::::::::::::::::::::::::::::::\n \n",
-        userspace_accesses, 
-        reads_count,
-        writes_count,
-        total_bytes_read,
-        total_bytes_write,
-        avg_bytes_read,
-        avg_bytes_written,
-        max_read,
-        min_read);
-    
-        //return formated stats to user
+                             "IPC Device Statistics:\n \n"
+                             "1. Total user-space accesses: %lu \n"
+                             "2. Total read operations: %lu \n"
+                             "3. Total write operations: %lu \n"
+                             "4. Total bytes read: %lu bytes \n"
+                             "5. Total bytes written: %lu bytes \n"
+                             "6. Average bytes per read: %lu bytes \n"
+                             "7. Average bytes per write: %lu bytes \n"
+                             "8. Maximum read size: %lu bytes\n"
+                             "9. Minimum read size: %lu bytes\n \n"
+                             "::::::::::::::::::::::::::::::::::::::::::::\n \n",
+                             userspace_accesses, 
+                             reads_count,
+                             writes_count,
+                             total_bytes_read,
+                             total_bytes_write,
+                             avg_bytes_read,
+                             avg_bytes_written,
+                             max_read,
+                             min_read);
+
+    //return formated stats to user
     if (copy_to_user(buffer, stats + *offset, formatted_len - *offset)) {
         printk(KERN_ERR "Failed to copy stats\n");
         kfree(stats);
@@ -325,7 +325,7 @@ ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t 
     proc_read = 1;  
 
     kfree(stats);
-     return len;
+    return len;
 }
 
 module_init(device_init); // initialising func
