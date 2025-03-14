@@ -291,8 +291,8 @@ ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t 
             avg_bytes_written = total_bytes_write / writes_count;
         } 
 
-    // Format the stats to display
-    formatted_len = snprintf(stats, 1024,
+    // Format the stats to display 
+    len = snprintf(stats, 1024,
         "IPC Device Statistics:\n \n"
         "1. Total user-space accesses: %lu \n"
         "2. Total read operations: %lu \n"
@@ -315,7 +315,7 @@ ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t 
         min_read);
     
         //return formated stats to user
-    if (copy_to_user(buffer, stats + *offset, formatted_len - *offset)) {
+    if (copy_to_user(buffer, stats + *offset, len - *offset)) {
         printk(KERN_ERR "Failed to copy stats\n");
         kfree(stats);
         return -EFAULT;
