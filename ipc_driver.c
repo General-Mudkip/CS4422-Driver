@@ -9,7 +9,7 @@
 #include <linux/mm.h>        // Shared memory
 #include <linux/cdev.h> // registering character devices
 #include <linux/proc_fs.h>  // for proc_create and remove_proc_entry
-
+#include <linux/ioctl.h> // for the ioctl commands
 
 #define DEVICE_NAME "Simple IPC" 
 #define MAJOR_DEVICE_NUMBER 42
@@ -19,6 +19,12 @@
 
 #define SHM_SIZE 1024 // Shared Memory Size
 #define MAX_READER_COUNT 4 // The maximum amount of readers at any one time
+
+// https://embetronicx.com/tutorials/linux/device-drivers/ioctl-tutorial-in-linux/
+#define IOCTL_GET_SHM_SIZE _IOR(MAJOR_DEVICE_NUMBER, 0, int) // get shared memory (/buffer) size
+#define IOCTL_SET_SHM_SIZE _IOW(MAJOR_DEVICE_NUMBER, 1, int) // set shared memory (/buffer) size
+#define IOCTL_GET_READER_COUNT _IOR(MAJOR_DEVICE_NUMBER, 2, int) // get max reader count
+#define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(MAJOR_DEVICE_NUMBER, 3, int) // get the length of the current string in the buffer
 
 
 MODULE_LICENSE("GPL");
@@ -71,6 +77,7 @@ static struct file_operations fops = {
     .release = device_closed,
     .read = device_read,
     .write = device_write,
+    .unlocked_ioctl = device_ioctl,
 };
 
 // Proc file operation structue
@@ -154,6 +161,59 @@ static void __exit ipc_proc_exit(void) {
     remove_proc_entry( "ipc_stats", NULL);
 }
 
+static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    int retval = 0;
+    int temp;
+
+    // https://www.geeksforgeeks.org/c-switch-statement/
+    switch (cmd) {
+        // Get shared memory size
+        case IOCTL_GET_SHM_SIZE:
+            temp = SHM_SIZE;
+            if (copy_to_user((int __user *)arg, &temp, sizeof(temp))) {
+                retval = -EFAULT;
+            }
+            break;
+
+        // Set shared memory size
+        case IOCTL_SET_SHM_SIZE:
+            if (copy_from_user(&temp, (int __user *)arg, sizeof(temp))) {
+                retval = -EFAULT
+            } else {
+                // Ensure temp is between reasonable bounds
+                // Upper bound was picked arbitrarily.
+                if (temp > 0 && temp <= 1024 * 10) { 
+                    SHM_SIZE = temp;
+                    kfree(shared_mem);
+                    shared_mem = kmalloc(SHM_size, GFP_KERNEL);
+                } else {
+                    // All the various error numbers: ( a lot )
+                    // https://www.man7.org/linux/man-pages/man3/errno.3.html
+                    retval = -EINVAL;
+                }
+            }
+            break;
+
+        // Get max number of readers
+        case IOCTL_GET_READER_COUNT:
+            temp = MAX_READER_COUNT;
+            if (copy_to_user((int __user *)arg, &temp, sizeof(temp))) {
+                retval = -EFAULT;
+            }
+            break;
+
+        // Get size of current stored string
+        case IOCTL_GET_CURRENT_BUFFER_SIZE:
+            temp = strlen(shared_mem);
+            if (copy_to_user((int __user *)arg, &temp, sizeof(temp))) {
+                retval = -EFAULT;
+            }
+            break;
+
+
+}
+
 
 // Open func
 static int device_open(struct inode *inode, struct file *file) {
@@ -207,7 +267,7 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
 
 
     if (copy_to_user(user_buffer, shared_mem, bytes_to_read)) { 
-        printk(KERN_ERR "Failed to copy data to uesr space\n");
+        printk(KERN_ERR "Failed to copy data to user space\n");
         up(&rw_sem);  // to ensure its released or else it gets stuck
         return -EFAULT;
     }
