@@ -17,7 +17,6 @@
 
 #define PROC_FILENAME "ipc_stats"
 
-#define SHM_SIZE 1024 // Shared Memory Size
 #define MAX_READER_COUNT 4 // The maximum amount of readers at any one time
 
 // https://embetronicx.com/tutorials/linux/device-drivers/ioctl-tutorial-in-linux/
@@ -25,7 +24,6 @@
 #define IOCTL_SET_SHM_SIZE _IOW(MAJOR_DEVICE_NUMBER, 1, int) // set shared memory (/buffer) size
 #define IOCTL_GET_READER_COUNT _IOR(MAJOR_DEVICE_NUMBER, 2, int) // get max reader count
 #define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(MAJOR_DEVICE_NUMBER, 3, int) // get the length of the current string in the buffer
-
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("");
@@ -35,6 +33,7 @@ MODULE_VERSION("1.0");
 static struct class *ipc_class = NULL;
 static struct device *ipc_device = NULL;
 
+static size_t shm_size = 1024;
 
 static char *shared_mem;
 static int data_written = 0;
@@ -65,6 +64,7 @@ static int device_closed(struct inode *inode, struct file *file);
 static ssize_t device_read(struct file *file, char __user *user_buffer, size_t len, loff_t *offset);
 static ssize_t device_write(struct file *file, const char __user *user_buffer, size_t len, loff_t *offset);
 static ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t *offset);
+static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 static int proc_read = 0;
 
@@ -118,7 +118,7 @@ static int __init device_init(void) {
     sema_init(&rw_sem, MAX_READER_COUNT);  // 1 for single reader
 
     // allocating dynamic memory for shared memory using kmalloc
-    shared_mem = kmalloc(SHM_SIZE, GFP_KERNEL);
+    shared_mem = kmalloc(shm_size, GFP_KERNEL);
     if (!shared_mem) {
         printk(KERN_ALERT "memory allocation failed\n");
         return -ENOMEM;  // out of memory
@@ -170,7 +170,7 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     switch (cmd) {
         // Get shared memory size
         case IOCTL_GET_SHM_SIZE:
-            temp = SHM_SIZE;
+            temp = shm_size;
             if (copy_to_user((int __user *)arg, &temp, sizeof(temp))) {
                 retval = -EFAULT;
             }
@@ -179,14 +179,14 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         // Set shared memory size
         case IOCTL_SET_SHM_SIZE:
             if (copy_from_user(&temp, (int __user *)arg, sizeof(temp))) {
-                retval = -EFAULT
+                retval = -EFAULT;
             } else {
                 // Ensure temp is between reasonable bounds
                 // Upper bound was picked arbitrarily.
                 if (temp > 0 && temp <= 1024 * 10) { 
-                    SHM_SIZE = temp;
+                    shm_size = temp;
                     kfree(shared_mem);
-                    shared_mem = kmalloc(SHM_size, GFP_KERNEL);
+                    shared_mem = kmalloc(shm_size, GFP_KERNEL);
                 } else {
                     // All the various error numbers: ( a lot )
                     // https://www.man7.org/linux/man-pages/man3/errno.3.html
@@ -211,7 +211,12 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             }
             break;
 
-
+        default:
+            retval = -EINVAL;
+            break;
+    }
+    
+    return retval;
 }
 
 
@@ -235,12 +240,12 @@ static int device_closed(struct inode *inode, struct file *file) {
 
 // Read
 static ssize_t device_read(struct file *file, char __user *user_buffer, size_t len, loff_t *offset) {
-    size_t bytes_to_read = min(len, SHM_SIZE);
-    printk(KERN_INFO "Provided read len: %zu bytes", len);
+    size_t bytes_to_read = min(len, shm_size);
 
     if (len > max_read) {
         max_read = len;   // update if current read is more than previous max
     }
+
     if (len < min_read) {
         min_read = len;  
     }
@@ -291,7 +296,7 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
 
 // Write
 static ssize_t device_write(struct file *file, const char __user *user_buffer, size_t len, loff_t *offset) {
-    size_t bytes_to_write = min(len, SHM_SIZE);
+    size_t bytes_to_write = min(len, shm_size);
 
     //proc file stats
     userspace_accesses++;
@@ -320,7 +325,7 @@ static ssize_t device_write(struct file *file, const char __user *user_buffer, s
 
     printk(KERN_INFO "Device wrote %zu bytes\n", bytes_to_write);
 
-    memset(shared_mem + bytes_to_write, 0, SHM_SIZE - bytes_to_write); //clearing buffer
+    memset(shared_mem + bytes_to_write, 0, shm_size - bytes_to_write); //clearing buffer
 
     for (int i = 0; i < MAX_READER_COUNT; i++) {
         up(&rw_sem);
