@@ -1,4 +1,3 @@
-
 ///<summary> 
 /// Reader program for the user-space. Its function is take data from kernel space and output it. 
 /// It consists of a parent thread and two child processes. Parent thread continously reads from device while 
@@ -11,17 +10,34 @@
 #include <unistd.h>   // read(), close()
 #include <pthread.h>  // Threading
 #include <string.h>   // String manipulation
-#include <time.h>
+#include <sys/ioctl.h> //for ioctl
+
+#define IOCTL_GET_SHM_SIZE _IOR(42, 0, int)
+#define IOCTL_GET_READER_COUNT _IOR(42, 2, int)
+#define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(42, 3, int)
 
 #define DEVICE_PATH "/dev/ipc_device"
 #define LOG_FILE_PATH "/tmp/reader_log.txt" // macro for path to log file
-#define BUFFER_SIZE 1024 
 
-char buffer[BUFFER_SIZE]; //shared buffer for data read from device
+char buffer[1024]; //shared buffer for data read from device
 
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared buffer
 
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
+
+//IOCTL
+void get_device_info(int fd) {
+    int value;
+
+    ioctl(fd, IOCTL_GET_SHM_SIZE, &value);
+    printf("IOCTL: Shared Memory Size: %d \n", value);
+
+    ioctl(fd, IOCTL_GET_READER_COUNT, &value);
+    printf("IOCTL: Reader Count: %d \n", value);
+
+    ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &value);
+    printf("IOCTL: Current Buffer Size: %d \n", value);
+}
 
 /*
 https://stackoverflow.com/questions/48748121/c-pthreads-parent-child-process
@@ -32,75 +48,107 @@ Lecture 8, Lecture 9, Lecture 10
 */
 
 // Parent thread continuously reads data from the device
-void* reader_thread(void* arg) {
-    int fd = open(DEVICE_PATH, O_RDONLY);
-    if (fd == -1) {
-        perror("Failed to open device");
+    void* reader_thread(void* arg) {
+        int fd = open(DEVICE_PATH, O_RDONLY);
+
+        if (fd == -1) {
+            perror("Failed to open device");
+            return NULL;
+        }
+
+        while (1) {
+
+            ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+    
+            if (bytes_read == 1) {
+                perror("Failed to read");
+                break;
+            }
+            
+            printf("Read bytes: %zd\n", bytes_read);
+        
+
+            if (bytes_read > 0) {
+                buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
+
+                pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
+                pthread_cond_signal(&data_available); //signals other threads 
+                pthread_mutex_unlock(&buffer_mutex); //
+            }
+
+            sleep(2);
+        }
+
+        close(fd);
         return NULL;
     }
 
-    while (1) {
-        ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
-        if (bytes_read < 0) {
-            perror("Failed to read");
-            break;
+    void set_shm_size(int new_size) {
+        int fd = open(DEVICE_PATH, O_WRONLY);
+        if (fd == -1) {
+            perror("Failed to open device for writing");
+            return;
         }
-
-        if (bytes_read > 0) {
-            buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
-
-            pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
-            pthread_cond_signal(&data_available); //signals other threads 
-            pthread_mutex_unlock(&buffer_mutex); //
-        }
-    }
-
-    close(fd);
-    return NULL;
-}
+    
+        ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size) 
+            printf("IOCTL: Shared memory size set to %d \n", new_size);
+        
+        close(fd);
+    
 
 // Console writer thread prints data to console
-void* console_writer_thread(void* arg) {
-    while (1) {
-        pthread_mutex_lock(&buffer_mutex);
-        pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-        printf("| Console | %d s | Data read from device: %s\nProcess ID: [%d]  Parent ID: [%d] \n", (int)time(NULL), buffer, getpid(), getppid());
+    void* console_writer_thread(void* arg) {
+        while (1) {
 
-        pthread_mutex_unlock(&buffer_mutex);
-    }
+            int ppid = getppid(); //parent id
+            int pid = getpid(); 
 
-    return NULL;
-}
+            pthread_mutex_lock(&buffer_mutex);
+            pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
+            printf("| Console | Data read from device: %s\n", buffer);
+            printf("Process ID: %d \nParent Process ID %d \n", pid, ppid);
 
-/* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
+            pthread_mutex_unlock(&buffer_mutex);
+        }
 
-// Log writer thread: Writes data to a log file
-void* log_writer_thread(void* arg) {
-    FILE* log_file = fopen(LOG_FILE_PATH, "a");
-    if (log_file == NULL) {
-        perror("failed to open log file");
         return NULL;
     }
 
-    while (1) {
-        pthread_mutex_lock(&buffer_mutex); 
-        pthread_cond_wait(&data_available, &buffer_mutex);  
+    /* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
 
-        // https://stackoverflow.com/questions/11765301/how-do-i-get-the-unix-timestamp-in-c-as-an-int
-        fprintf(log_file, "| Log | %d | Data read from device: %s\nProcess ID: [%d]  Parent ID: [%d] \n", (int)time(NULL), buffer, getpid(), getppid());
+// Log writer thread: Writes data to a log file
+    void* log_writer_thread(void* arg) {
+        FILE* log_file = fopen(LOG_FILE_PATH, "a");
+        if (log_file == NULL) {
+            perror("failed to open log file");
+            return NULL;
+        }
 
-        /* https://how.dev/answers/what-is-fflush-in-c */
+        while (1) {
+            pthread_mutex_lock(&buffer_mutex); 
+            pthread_cond_wait(&data_available, &buffer_mutex);  
 
-        fflush(log_file);  // immediately write to the log file/disk
+            fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
+            printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
 
-        pthread_mutex_unlock(&buffer_mutex);
+            /* https://how.dev/answers/what-is-fflush-in-c */
+
+            fflush(log_file);  // immediately write to the log file/disk
+
+            pthread_mutex_unlock(&buffer_mutex);
+        }
+
+        fclose(log_file);
+        return NULL; // exits
     }
 
-    fclose(log_file);
-    return NULL; // exits
-}
+int main(int argc, char* argv[]) {
 
-int main() {
+    if (argc == 2) {
+        int new_size = atoi(argv[1]);
+        set_shm_size(new_size);
+    }  
+    
     pthread_t reader_tid, console_writer_tid, log_writer_tid; //thread identifiers
 
     // Start the threads
