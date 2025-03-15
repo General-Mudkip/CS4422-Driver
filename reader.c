@@ -1,3 +1,4 @@
+
 ///<summary> 
 /// Reader program for the user-space. Its function is take data from kernel space and output it. 
 /// It consists of a parent thread and two child processes. Parent thread continously reads from device while 
@@ -39,7 +40,7 @@ void* reader_thread(void* arg) {
     }
 
     while (1) {
-        ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+        ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
         if (bytes_read < 0) {
             perror("Failed to read");
             break;
@@ -63,7 +64,7 @@ void* console_writer_thread(void* arg) {
     while (1) {
         pthread_mutex_lock(&buffer_mutex);
         pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-        printf("| Console | %d s | Data read from device: %s\n", (int)time(NULL), buffer);
+        printf("| Console | %d s | Data read from device: %s\nProcess ID: [%d]  Parent ID: [%d] \n", (int)time(NULL), buffer, getpid(), getppid());
 
         pthread_mutex_unlock(&buffer_mutex);
     }
@@ -86,7 +87,7 @@ void* log_writer_thread(void* arg) {
         pthread_cond_wait(&data_available, &buffer_mutex);  
 
         // https://stackoverflow.com/questions/11765301/how-do-i-get-the-unix-timestamp-in-c-as-an-int
-        fprintf(log_file, "| Log | %d | Data read from device: %s\n", (int)time(NULL), buffer);
+        fprintf(log_file, "| Log | %d | Data read from device: %s\nProcess ID: [%d]  Parent ID: [%d] \n", (int)time(NULL), buffer, getpid(), getppid());
 
         /* https://how.dev/answers/what-is-fflush-in-c */
 
