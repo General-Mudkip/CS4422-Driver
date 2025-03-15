@@ -1,3 +1,4 @@
+
 ///<summary> Writer program for the user-space. Its function is to take input from the console and write it to the kernal. 
 
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <unistd.h> // write(), close()
 #include <string.h>  // String manipulation
 #include <sys/ioctl.h> // For accessing ioctl shtuff
+#include<time.h> //for readable time
 
 #define DEVICE_PATH "/dev/ipc_device"
 
@@ -54,7 +56,9 @@ int main(int argc, char *argv[]) {
     if (bytes_written < 0) {
         perror("Write failed");
     } else {
-        printf("Data written to device: %zu bytes\n", bytes_written);
+        time_t t;
+        time(&t);
+        printf("Data written to device: %zu bytes\nTime created/written: %s ProcessID: %d \n", bytes_written, ctime(&t), getpid());
     }
 
     close(fd); 
