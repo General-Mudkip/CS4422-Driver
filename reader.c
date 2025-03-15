@@ -13,6 +13,7 @@
 #include <sys/ioctl.h> //for ioctl
 
 #define IOCTL_GET_SHM_SIZE _IOR(42, 0, int)
+#define IOCTL_SET_SHM_SIZE _IOW(42, 1, int)
 #define IOCTL_GET_READER_COUNT _IOR(42, 2, int)
 #define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(42, 3, int)
 
@@ -34,9 +35,6 @@ void get_device_info(int fd) {
 
     ioctl(fd, IOCTL_GET_READER_COUNT, &value);
     printf("IOCTL: Reader Count: %d \n", value);
-
-    ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &value);
-    printf("IOCTL: Current Buffer Size: %d \n", value);
 }
 
 /*
@@ -46,6 +44,8 @@ https://www.geeksforgeeks.org/thread-functions-in-c-c/
 
 Lecture 8, Lecture 9, Lecture 10
 */
+
+int string_size;
 
 // Parent thread continuously reads data from the device
     void* reader_thread(void* arg) {
@@ -60,14 +60,14 @@ Lecture 8, Lecture 9, Lecture 10
 
             ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
     
-            if (bytes_read == 1) {
+            if (bytes_read - 1) {
                 perror("Failed to read");
                 break;
             }
-            
-            printf("Read bytes: %zd\n", bytes_read);
-        
 
+            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+            printf("Read bytes: %d \n", string_size);
+        
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
 
@@ -90,10 +90,11 @@ Lecture 8, Lecture 9, Lecture 10
             return;
         }
     
-        ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size) 
+        ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size);
             printf("IOCTL: Shared memory size set to %d \n", new_size);
         
         close(fd);
+    }
     
 
 // Console writer thread prints data to console
