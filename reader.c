@@ -144,10 +144,10 @@ int string_size;
     }
 
 int main(int argc, char* argv[]) {
-
+ // takes input from the console to set the shm. example: sudo ./reader 1024
     if (argc == 2) {
-        int new_size = atoi(argv[1]);
-        set_shm_size(new_size);
+        int new_size = atoi(argv[1]); //converts from string to int
+        set_shm_size(new_size); //callin ioctl to set custom shm
     }  
     
     pthread_t reader_tid, console_writer_tid, log_writer_tid; //thread identifiers
