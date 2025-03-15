@@ -26,7 +26,7 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared bu
 
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
 
-static int value;
+int new_data_available = 0;
 
 //IOCTL
 void get_device_info(int fd) {
@@ -47,6 +47,8 @@ https://www.geeksforgeeks.org/thread-functions-in-c-c/
 Lecture 8, Lecture 9, Lecture 10
 */
 
+int string_size;
+
 // Parent thread continuously reads data from the device
     void* reader_thread(void* arg) {
         int fd = open(DEVICE_PATH, O_RDONLY);
@@ -56,8 +58,6 @@ Lecture 8, Lecture 9, Lecture 10
             return NULL;
         }
 
-        int prev_value = -1;
-
         while (1) {
 
             ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
@@ -66,25 +66,21 @@ Lecture 8, Lecture 9, Lecture 10
                 perror("Failed to read");
                 break;
             }
-    
+
+        
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
-
-                ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &value);
-
-                if (value != prev_value) {
-                    printf("IOCTL: Current Buffer Size: %d \n", value);
-                    printf("Read bytes: %d\n", value);
-                    prev_value = value; // Update last printed value
-                }
-    
+                ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+            
+                printf("Read bytes: %d \n", string_size);
 
                 pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
                 pthread_cond_signal(&data_available); //signals other threads 
+                new_data_available = 1; 
                 pthread_mutex_unlock(&buffer_mutex); //
-
-                usleep(500000);
             }
+
+            sleep(2);
         }
 
         close(fd);
@@ -103,53 +99,56 @@ Lecture 8, Lecture 9, Lecture 10
         
         close(fd);
     }
+    
 
-    int data_processed;
 // Console writer thread prints data to console
 void* console_writer_thread(void* arg) {
     while (1) {
         pthread_mutex_lock(&buffer_mutex);
-        while (data_processed) { // Wait until data is available
-            pthread_cond_wait(&data_available, &buffer_mutex);
+
+        while (!new_data_available) {
+        pthread_cond_wait(&data_available, &buffer_mutex);  
         }
 
-        // Now process the data
+        // Print the data to the console once it's available
         printf("| Console | Data read from device: %s\n", buffer);
         printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
 
-        data_processed = 1; // Mark data as processed
-
+        memset(buffer, 0, sizeof(buffer)); 
+        new_data_available = 0; 
         pthread_mutex_unlock(&buffer_mutex);
     }
     return NULL;
 }
 
-    /* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
-
-// Log writer thread: Writes data to a log file
-    void* log_writer_thread(void* arg) {
-        FILE* log_file = fopen(LOG_FILE_PATH, "a");
-        if (log_file == NULL) {
-            perror("failed to open log file");
-            return NULL;
-        }
-
-        while (1) {
-            pthread_mutex_lock(&buffer_mutex); 
-            pthread_cond_wait(&data_available, &buffer_mutex);  
-
-            fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
-
-            /* https://how.dev/answers/what-is-fflush-in-c */
-
-            fflush(log_file);  // immediately write to the log file/disk
-
-            pthread_mutex_unlock(&buffer_mutex);
-        }
-
-        fclose(log_file);
-        return NULL; // exits
+void* log_writer_thread(void* arg) {
+    FILE* log_file = fopen(LOG_FILE_PATH, "a");
+    if (log_file == NULL) {
+        perror("failed to open log file");
+        return NULL;
     }
+
+    while (1) {
+        pthread_mutex_lock(&buffer_mutex);
+        
+        while (!new_data_available) {
+        pthread_cond_wait(&data_available, &buffer_mutex);  
+        }
+
+        // Write the data to the log file once it's available
+        fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
+        fflush(log_file);  // immediately write to the log file
+
+        memset(buffer, 0, sizeof(buffer));
+        new_data_available = 0;
+
+        pthread_mutex_unlock(&buffer_mutex);
+    }
+
+    fclose(log_file);
+    return NULL;
+}
+
 
 int main(int argc, char* argv[]) {
 
