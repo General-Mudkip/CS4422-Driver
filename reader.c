@@ -26,6 +26,8 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared bu
 
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
 
+static int value;
+
 //IOCTL
 void get_device_info(int fd) {
     int value;
@@ -45,8 +47,6 @@ https://www.geeksforgeeks.org/thread-functions-in-c-c/
 Lecture 8, Lecture 9, Lecture 10
 */
 
-int string_size;
-
 // Parent thread continuously reads data from the device
     void* reader_thread(void* arg) {
         int fd = open(DEVICE_PATH, O_RDONLY);
@@ -56,27 +56,35 @@ int string_size;
             return NULL;
         }
 
+        int prev_value = -1;
+
         while (1) {
 
             ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
     
-            if (bytes_read - 1) {
+            if (bytes_read == -1) {
                 perror("Failed to read");
                 break;
             }
-
-            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-            printf("Read bytes: %d \n", string_size);
-        
+    
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
+
+                ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &value);
+
+                if (value != prev_value) {
+                    printf("IOCTL: Current Buffer Size: %d \n", value);
+                    printf("Read bytes: %d\n", value);
+                    prev_value = value; // Update last printed value
+                }
+    
 
                 pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
                 pthread_cond_signal(&data_available); //signals other threads 
                 pthread_mutex_unlock(&buffer_mutex); //
-            }
 
-            sleep(2);
+                usleep(500000);
+            }
         }
 
         close(fd);
@@ -95,25 +103,26 @@ int string_size;
         
         close(fd);
     }
-    
 
+    int data_processed;
 // Console writer thread prints data to console
-    void* console_writer_thread(void* arg) {
-        while (1) {
-
-            int ppid = getppid(); //parent id
-            int pid = getpid(); 
-
-            pthread_mutex_lock(&buffer_mutex);
-            pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-            printf("| Console | Data read from device: %s\n", buffer);
-            printf("Process ID: %d \nParent Process ID %d \n", pid, ppid);
-
-            pthread_mutex_unlock(&buffer_mutex);
+void* console_writer_thread(void* arg) {
+    while (1) {
+        pthread_mutex_lock(&buffer_mutex);
+        while (data_processed) { // Wait until data is available
+            pthread_cond_wait(&data_available, &buffer_mutex);
         }
 
-        return NULL;
+        // Now process the data
+        printf("| Console | Data read from device: %s\n", buffer);
+        printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
+
+        data_processed = 1; // Mark data as processed
+
+        pthread_mutex_unlock(&buffer_mutex);
     }
+    return NULL;
+}
 
     /* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
 
@@ -130,7 +139,6 @@ int string_size;
             pthread_cond_wait(&data_available, &buffer_mutex);  
 
             fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
-            printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
 
             /* https://how.dev/answers/what-is-fflush-in-c */
 
