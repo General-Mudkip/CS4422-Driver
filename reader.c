@@ -60,7 +60,7 @@ int string_size;
 
             ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
     
-            if (bytes_read - 1) {
+            if (bytes_read == -1) {
                 perror("Failed to read");
                 break;
             }
