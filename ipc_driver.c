@@ -257,7 +257,7 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
 
 
     if (data_written == 0) { // check for data
-        printk(KERN_INFO "No data available to read\n");
+        // printk(KERN_INFO "No data available to read\n");
         return 0; 
     } 
 

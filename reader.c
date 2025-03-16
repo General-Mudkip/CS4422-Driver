@@ -48,108 +48,131 @@ Lecture 8, Lecture 9, Lecture 10
 int string_size;
 
 // Parent thread continuously reads data from the device
-    void* reader_thread(void* arg) {
-        int fd = open(DEVICE_PATH, O_RDONLY);
+void* reader_thread(void* arg) {
+    int fd = open(DEVICE_PATH, O_RDONLY);
 
-        if (fd == -1) {
-            perror("Failed to open device");
-            return NULL;
-        }
-
-        while (1) {
-
-            ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
-    
-            if (bytes_read == -1) {
-                perror("Failed to read");
-                break;
-            }
-
-            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-            printf("Read bytes: %d \n", string_size);
-        
-            if (bytes_read > 0) {
-                buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
-
-                pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
-                pthread_cond_signal(&data_available); //signals other threads 
-                pthread_mutex_unlock(&buffer_mutex); //
-            }
-
-            sleep(2);
-        }
-
-        close(fd);
+    if (fd == -1) {
+        perror("Failed to open device");
         return NULL;
     }
 
-    void set_shm_size(int new_size) {
-        int fd = open(DEVICE_PATH, O_WRONLY);
-        if (fd == -1) {
-            perror("Failed to open device for writing");
-            return;
+    while (1) {
+
+        ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+
+        if (bytes_read == -1) {
+            perror("Failed to read");
+            break;
         }
-    
-        ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size);
-            printf("IOCTL: Shared memory size set to %d \n", new_size);
-        
-        close(fd);
+
+        ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+        printf("Read bytes: %d \n", string_size);
+
+        if (bytes_read > 0) {
+            buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
+
+            pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
+            pthread_cond_signal(&data_available); //signals other threads 
+            pthread_mutex_unlock(&buffer_mutex); //
+        }
+
+        sleep(2);
     }
-    
+
+    close(fd);
+    return NULL;
+}
+
+while (1) {
+
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+
+    /* if (bytes_read - 1) { */
+    /*     perror("Failed to read"); */
+    /*     break; */
+    /* } */
+
+    ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+
+    if (bytes_read > 0) {
+        buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
+
+        pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
+        pthread_cond_signal(&data_available); //signals other threads 
+        pthread_mutex_unlock(&buffer_mutex); //
+    }
+}
+
+close(fd);
+return NULL;
+}
+
+void set_shm_size(int new_size) {
+    int fd = open(DEVICE_PATH, O_WRONLY);
+    if (fd == -1) {
+        perror("Failed to open device for writing");
+        return;
+    }
+
+    ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size);
+    printf("IOCTL: Shared memory size set to %d \n", new_size);
+
+    close(fd);
+}
+
 
 // Console writer thread prints data to console
-    void* console_writer_thread(void* arg) {
-        while (1) {
+void* console_writer_thread(void* arg) {
+    while (1) {
 
-            int ppid = getppid(); //parent id
-            int pid = getpid(); 
+        int ppid = getppid(); //parent id
+        int pid = getpid(); 
 
-            pthread_mutex_lock(&buffer_mutex);
-            pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-            printf("| Console | Data read from device: %s\n", buffer);
-            printf("Process ID: %d \nParent Process ID %d \n", pid, ppid);
+        pthread_mutex_lock(&buffer_mutex);
+        pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
+        printf("| Console | Data read from device: %s\n", buffer);
+        printf("Process ID: %d \nParent Process ID %d \n", pid, ppid);
 
-            pthread_mutex_unlock(&buffer_mutex);
-        }
+        pthread_mutex_unlock(&buffer_mutex);
+    }
 
+    return NULL;
+}
+
+/* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
+
+// Log writer thread: Writes data to a log file
+void* log_writer_thread(void* arg) {
+    FILE* log_file = fopen(LOG_FILE_PATH, "a");
+    if (log_file == NULL) {
+        perror("failed to open log file");
         return NULL;
     }
 
-    /* https://community.ptc.com/t5/Customization/Write-log-file/td-p/642638 */
+    while (1) {
+        pthread_mutex_lock(&buffer_mutex); 
+        pthread_cond_wait(&data_available, &buffer_mutex);  
 
-// Log writer thread: Writes data to a log file
-    void* log_writer_thread(void* arg) {
-        FILE* log_file = fopen(LOG_FILE_PATH, "a");
-        if (log_file == NULL) {
-            perror("failed to open log file");
-            return NULL;
-        }
+        fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
 
-        while (1) {
-            pthread_mutex_lock(&buffer_mutex); 
-            pthread_cond_wait(&data_available, &buffer_mutex);  
+        /* https://how.dev/answers/what-is-fflush-in-c */
 
-            fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
-            printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
+        fflush(log_file);  // immediately write to the log file/disk
 
-            /* https://how.dev/answers/what-is-fflush-in-c */
-
-            fflush(log_file);  // immediately write to the log file/disk
-
-            pthread_mutex_unlock(&buffer_mutex);
-        }
-
-        fclose(log_file);
-        return NULL; // exits
+        pthread_mutex_unlock(&buffer_mutex);
     }
 
+    fclose(log_file);
+    return NULL; // exits
+}
+
 int main(int argc, char* argv[]) {
- // takes input from the console to set the shm. example: sudo ./reader 1024
+    // takes input from the console to set the shm. example: sudo ./reader 1024
     if (argc == 2) {
         int new_size = atoi(argv[1]); //converts from string to int
         set_shm_size(new_size); //callin ioctl to set custom shm
     }  
-    
+
     pthread_t reader_tid, console_writer_tid, log_writer_tid; //thread identifiers
 
     // Start the threads
