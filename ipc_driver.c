@@ -47,9 +47,8 @@ static unsigned long total_bytes_read = 0;
 static unsigned long total_bytes_write = 0;
 static unsigned long reads_count = 0;
 static unsigned long writes_count = 0;
-static size_t max_read = 0;
-static size_t min_read = SIZE_MAX; 
-unsigned long avg_bytes_read = 0;
+static size_t max_written = 0;
+static size_t min_written = SIZE_MAX; 
 unsigned long avg_bytes_written = 0;
 
 
