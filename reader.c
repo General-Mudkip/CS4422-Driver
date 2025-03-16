@@ -74,6 +74,8 @@ void* reader_thread(void* arg) {
             pthread_cond_signal(&data_available); //signals other threads 
             pthread_mutex_unlock(&buffer_mutex); //
         }
+
+        sleep(1);
     }
 
     close(fd);
