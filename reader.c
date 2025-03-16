@@ -64,11 +64,10 @@ void* reader_thread(void* arg) {
             perror("Failed to read");
             break;
         }
-
-        ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-        printf("Read bytes: %d \n", string_size);
-
+        
         if (bytes_read > 0) {
+            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+            printf("Read bytes: %d \n", string_size);
             buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
 
             pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
@@ -81,30 +80,6 @@ void* reader_thread(void* arg) {
 
     close(fd);
     return NULL;
-}
-
-while (1) {
-
-    ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
-
-    /* if (bytes_read - 1) { */
-    /*     perror("Failed to read"); */
-    /*     break; */
-    /* } */
-
-    ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-
-    if (bytes_read > 0) {
-        buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
-
-        pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
-        pthread_cond_signal(&data_available); //signals other threads 
-        pthread_mutex_unlock(&buffer_mutex); //
-    }
-}
-
-close(fd);
-return NULL;
 }
 
 void set_shm_size(int new_size) {
