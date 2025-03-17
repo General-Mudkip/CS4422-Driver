@@ -292,6 +292,9 @@ static int __decrypt_shared_memory(void) {
 }
 
 // Generates the keys for RSA encryption
+// This function isn't used in the actual encryption/decryption process
+// Couldn't because of time, and I didn't know how to securely pass the keys
+// from userspace to the kernel
 static long string_to_int(const char* str) {
     long result = 0;
     int len = strlen(str);

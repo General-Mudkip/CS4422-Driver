@@ -97,14 +97,14 @@ void* reader_thread(void* arg) {
         ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
 
         if (bytes_read > 0) {
+            pthread_mutex_lock(&buffer_mutex);
             struct message_data* msg = (struct message_data*)buffer;
             printf("Received message with hash: %ld\n", msg->unique_hash);
 
             if (!has_seen_hash(msg->unique_hash)) {
-                pthread_mutex_lock(&buffer_mutex);
                 pthread_cond_broadcast(&data_available);
-                pthread_mutex_unlock(&buffer_mutex);
             }
+            pthread_mutex_unlock(&buffer_mutex);
         }
 
         sleep(1);

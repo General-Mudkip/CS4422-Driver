@@ -99,13 +99,16 @@ int main(int argc, char *argv[]) {
     to_be_hashed = strcat(to_be_hashed, timestamp_string);
     to_be_hashed = strcat(to_be_hashed, pid_string);
     to_be_hashed = strcat(to_be_hashed, new_msg->message);
-    printf("Pre hash: %s \nPost hash: %d\n", to_be_hashed, hash(to_be_hashed));
 
     // Absolutely cooked way of hashing it but sure
     new_msg->unique_hash = hash(to_be_hashed); // Used for identifying unique messages
 
+    free(to_be_hashed);
+
     // Write messages to device 
     ssize_t bytes_written = write(fd, new_msg, total_message_size); //writes the message  to device
+
+    free(new_msg);
 
     if (bytes_written < 0) {
         perror("Write failed");
