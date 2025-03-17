@@ -321,7 +321,6 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
     //update proc file stats
     userspace_accesses++;
     reads_count++;
-    total_bytes_read += len;
 
 
     if (data_written == 0) { // check for data
@@ -492,6 +491,8 @@ printk(KERN_INFO "stats_read called\n");
     avg_bytes_written = total_bytes_write / writes_count;
     }
 
+    total_bytes_read = total_bytes_write;
+    
     len = snprintf(stats, 1024,
         "Userspace accesses: %lu\n"
         "Total bytes read: %lu\n"
