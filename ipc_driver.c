@@ -36,9 +36,9 @@ static struct device *ipc_device = NULL;
 
 static size_t shm_size = 1024;
 
-
 static char encrypted_mem[SHM_SIZE] = {0};  // holds encrypted data
 static char decrypted_mem[SHM_SIZE] = {0};  // holds decrypted data
+
 
 static char *shared_mem;
 static int data_written = 0;
@@ -71,6 +71,7 @@ static ssize_t stats_read(struct file *file, char __user *buffer, size_t count, 
 static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static long long mod_inverse(long long e, long long phi);
 static long long mod_exp(long long base, long long exp, long long mod);
+
 
 static int proc_read = 0;
 
@@ -479,7 +480,6 @@ printk(KERN_INFO "stats_read called\n");
         "Avg bytes written: %lu\n",
         userspace_accesses, total_bytes_read, total_bytes_write,
         reads_count, writes_count, max_written, min_written, avg_bytes_written);
-
 
     if (copy_to_user(buffer, stats, len)) {
         kfree(stats);

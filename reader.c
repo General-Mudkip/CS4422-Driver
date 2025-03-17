@@ -10,17 +10,34 @@
 #include <unistd.h>   // read(), close()
 #include <pthread.h>  // Threading
 #include <string.h>   // String manipulation
-#include <time.h>
+#include <sys/ioctl.h> //for ioctl
+
+#define IOCTL_GET_SHM_SIZE _IOR(42, 0, int)
+#define IOCTL_SET_SHM_SIZE _IOW(42, 1, int)
+#define IOCTL_GET_READER_COUNT _IOR(42, 2, int)
+#define IOCTL_GET_CURRENT_BUFFER_SIZE _IOR(42, 3, int)
 
 #define DEVICE_PATH "/dev/ipc_device"
 #define LOG_FILE_PATH "/tmp/reader_log.txt" // macro for path to log file
-#define BUFFER_SIZE 1024 
 
-char buffer[BUFFER_SIZE]; //shared buffer for data read from device
+char buffer[1024]; //shared buffer for data read from device
 
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared buffer
 
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
+
+int string_size;
+
+//IOCTL
+void get_device_info(int fd) {
+    int value;
+
+    ioctl(fd, IOCTL_GET_SHM_SIZE, &value);
+    printf("IOCTL: Shared Memory Size: %d \n", value);
+
+    ioctl(fd, IOCTL_GET_READER_COUNT, &value);
+    printf("IOCTL: Reader Count: %d \n", value);
+}
 
 /*
 https://stackoverflow.com/questions/48748121/c-pthreads-parent-child-process
@@ -30,40 +47,64 @@ https://www.geeksforgeeks.org/thread-functions-in-c-c/
 Lecture 8, Lecture 9, Lecture 10
 */
 
+/* https://medium.com/@joshuaudayagiri/linux-system-calls-read-a9ce7ed33827 */
+
 // Parent thread continuously reads data from the device
 void* reader_thread(void* arg) {
     int fd = open(DEVICE_PATH, O_RDONLY);
+
     if (fd == -1) {
         perror("Failed to open device");
         return NULL;
     }
 
     while (1) {
-        ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-        if (bytes_read < 0) {
+
+        ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+
+        if (bytes_read == -1) {
             perror("Failed to read");
             break;
         }
-
+        
         if (bytes_read > 0) {
+            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
+            printf("Read bytes: %d \n", string_size);
             buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
 
             pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
             pthread_cond_signal(&data_available); //signals other threads 
             pthread_mutex_unlock(&buffer_mutex); //
         }
+
+        sleep(1);
     }
 
     close(fd);
     return NULL;
 }
 
+void set_shm_size(int new_size) {
+    int fd = open(DEVICE_PATH, O_WRONLY);
+    if (fd == -1) {
+        perror("Failed to open device for writing");
+        return;
+    }
+
+    ioctl(fd, IOCTL_SET_SHM_SIZE, &new_size);
+    printf("IOCTL: Shared memory size set to %d \n", new_size);
+
+    close(fd);
+}
+
+
 // Console writer thread prints data to console
 void* console_writer_thread(void* arg) {
     while (1) {
         pthread_mutex_lock(&buffer_mutex);
         pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-        printf("| Console | %d s | Data read from device: %s\n", (int)time(NULL), buffer);
+        printf("| Console | Data read from device: %s\n", buffer);
+        printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
 
         pthread_mutex_unlock(&buffer_mutex);
     }
@@ -75,7 +116,7 @@ void* console_writer_thread(void* arg) {
 
 // Log writer thread: Writes data to a log file
 void* log_writer_thread(void* arg) {
-    FILE* log_file = fopen(LOG_FILE_PATH, "a");
+    FILE* log_file = fopen(LOG_FILE_PATH, "a"); //open log file in append mode
     if (log_file == NULL) {
         perror("failed to open log file");
         return NULL;
@@ -85,8 +126,7 @@ void* log_writer_thread(void* arg) {
         pthread_mutex_lock(&buffer_mutex); 
         pthread_cond_wait(&data_available, &buffer_mutex);  
 
-        // https://stackoverflow.com/questions/11765301/how-do-i-get-the-unix-timestamp-in-c-as-an-int
-        fprintf(log_file, "| Log | %d | Data read from device: %s\n", (int)time(NULL), buffer);
+        fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
 
         /* https://how.dev/answers/what-is-fflush-in-c */
 
@@ -99,7 +139,13 @@ void* log_writer_thread(void* arg) {
     return NULL; // exits
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // takes input from the console to set the shm. example: sudo ./reader 1024
+    if (argc == 2) {
+        int new_size = atoi(argv[1]); //converts from string to int
+        set_shm_size(new_size); //callin ioctl to set custom shm
+    }  
+
     pthread_t reader_tid, console_writer_tid, log_writer_tid; //thread identifiers
 
     // Start the threads

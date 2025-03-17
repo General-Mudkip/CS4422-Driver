@@ -6,8 +6,13 @@
 #include <fcntl.h>  // File control operations, open()
 #include <unistd.h> // write(), close()
 #include <string.h>  // String manipulation
+#include <sys/ioctl.h> // For accessing ioctl shtuff
+#include<time.h> //for readable time
 
 #define DEVICE_PATH "/dev/ipc_device"
+
+// Defining the ioctl functions
+#define IOCTL_GET_SHM_SIZE _IOR(42, 0, int)
 
 /* https://www.geeksforgeeks.org/command-line-arguments-in-c-cpp/ */
 
@@ -27,11 +32,21 @@ int main(int argc, char *argv[]) {
     }
 
     // Open device for writing
+    // O_WRONLY == write only
     int fd = open(DEVICE_PATH, O_WRONLY); // file descriptor that stores what open() returns
     if (fd == -1) { 
         perror("Failed to open device"); 
         return 1;
     }
+
+    // Testing ioctl shtuff
+    int shm_size;
+    if (ioctl(fd, IOCTL_GET_SHM_SIZE, &shm_size) == -1) {
+        perror("Failed to get shared memory size");
+        close(fd);
+        return -1;
+    }
+    printf("Shared Memory Size: %d\n", shm_size);
 
     /* https://www.quora.com/How-does-the-write-function-work-in-C-Can-you-explain-this-function */
 
@@ -41,7 +56,9 @@ int main(int argc, char *argv[]) {
     if (bytes_written < 0) {
         perror("Write failed");
     } else {
-        printf("Data written to device: %zu bytes\n", bytes_written);
+        time_t t;
+        time(&t);
+        printf("Data written to device: %zu bytes\nTime created/written: %s \nProcessID: %d \n", bytes_written, ctime(&t), getpid());
     }
 
     close(fd); 
