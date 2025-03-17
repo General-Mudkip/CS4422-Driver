@@ -106,7 +106,7 @@ void* console_writer_thread(void* arg) {
         // Cast the raw buffer to the message_data struct
         struct message_data* msg = (struct message_data*)buffer;
         printf(
-            "| Console | %d s | Writer PID: %D | %s\n",
+            "|| Console | %d | Writer PID: %d || %s\n",
             msg->timestamp, msg->writer_pid, msg->message
         );
 
@@ -133,7 +133,7 @@ void* log_writer_thread(void* arg) {
         struct message_data* msg = (struct message_data*)buffer;
         fprintf(
             log_file,
-            "| Log | %d s | Writer PID: %D | %s\n",
+            "|| Log | %d | Writer PID: %d || %s\n",
             msg->timestamp, msg->writer_pid, msg->message
         );
 
