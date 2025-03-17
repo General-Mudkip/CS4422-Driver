@@ -26,6 +26,8 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared bu
 
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
 
+int string_size;
+
 //IOCTL
 void get_device_info(int fd) {
     int value;
@@ -45,7 +47,7 @@ https://www.geeksforgeeks.org/thread-functions-in-c-c/
 Lecture 8, Lecture 9, Lecture 10
 */
 
-int string_size;
+/* https://medium.com/@joshuaudayagiri/linux-system-calls-read-a9ce7ed33827 */
 
 // Parent thread continuously reads data from the device
 void* reader_thread(void* arg) {
@@ -99,14 +101,10 @@ void set_shm_size(int new_size) {
 // Console writer thread prints data to console
 void* console_writer_thread(void* arg) {
     while (1) {
-
-        int ppid = getppid(); //parent id
-        int pid = getpid(); 
-
         pthread_mutex_lock(&buffer_mutex);
         pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
         printf("| Console | Data read from device: %s\n", buffer);
-        printf("Process ID: %d \nParent Process ID %d \n", pid, ppid);
+        printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
 
         pthread_mutex_unlock(&buffer_mutex);
     }
@@ -118,7 +116,7 @@ void* console_writer_thread(void* arg) {
 
 // Log writer thread: Writes data to a log file
 void* log_writer_thread(void* arg) {
-    FILE* log_file = fopen(LOG_FILE_PATH, "a");
+    FILE* log_file = fopen(LOG_FILE_PATH, "a"); //open log file in append mode
     if (log_file == NULL) {
         perror("failed to open log file");
         return NULL;
