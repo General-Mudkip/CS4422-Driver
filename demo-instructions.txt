@@ -1,0 +1,6 @@
+1. Compile the LKM (`make`), and the reader/writer programs (`gcc reader.c -o reader`)
+2. Load the kernel module (`sudo insmod ipc_driver.ko`)
+3. Open dmesg (`sudo dmesg -w`)
+4. Start the reader (`sudo ./reader`)
+5. Write some messages (`sudo ./writer "Hello, world"`) note: Exclamation marks can't be used because of some weird zsh quirk
+6. Show the dmesg logs
