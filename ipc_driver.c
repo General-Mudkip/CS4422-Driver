@@ -37,7 +37,7 @@ static size_t shm_size = 1024;
 
 static char *shared_mem;
 static int data_written = 0;
-static int readers_remaining = 3; // 1 parent reader + 2 child threads
+static int readers_remaining = 3;
 
 static struct proc_dir_entry *proc_file;
 
@@ -275,7 +275,6 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
     // readers now read in cycles hence decrement after finish reading
     readers_remaining--; 
 
-    //CHECK THIS!!!!
     if (readers_remaining <= 0) {  
         data_written = 0;  // reset only after all readers have read
         readers_remaining = 3;  // reset for the next read cycle
@@ -335,7 +334,7 @@ static ssize_t device_write(struct file *file, const char __user *user_buffer, s
     return bytes_to_write;
 }
 
-// 
+
 
 ssize_t stats_read(struct file *file, char __user *buffer, size_t count, loff_t *offset) {
 printk(KERN_INFO "stats_read called\n");
