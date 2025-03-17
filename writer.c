@@ -17,6 +17,20 @@
 
 /* https://www.geeksforgeeks.org/command-line-arguments-in-c-cpp/ */
 
+
+// http://www.cse.yorku.ca/~oz/hash.html
+// Hashes a provided string
+int64_t hash(unsigned char *str)
+{
+    int64_t hash = 5381;
+    int c;
+
+    while (c = *str++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
 //Take messages from console
 //argc is no. of arguments and argv is an array of string for the arguments
 int main(int argc, char *argv[]) {
@@ -69,7 +83,26 @@ int main(int argc, char *argv[]) {
     // opf the message in the struct
     memcpy(new_msg->message, argv[1], message_length);
 
-    printf("message: %s\n", new_msg->message);
+    char timestamp_string[256]; 
+    char pid_string[256]; 
+    sprintf(timestamp_string, "%ld", new_msg->timestamp); // Converts timestamp to string
+    sprintf(pid_string, "%ld", new_msg->writer_pid); // Converts PID to string
+
+    char *to_be_hashed = malloc(strlen(timestamp_string) + strlen(pid_string) + message_length + 1); // +1 for null terminator
+    if (!to_be_hashed) {
+        perror("Failed to allocate memory for hash string");
+        close(fd);
+        return -1;
+    }
+
+    to_be_hashed[0] = '\0'; //empty string
+    to_be_hashed = strcat(to_be_hashed, timestamp_string);
+    to_be_hashed = strcat(to_be_hashed, pid_string);
+    to_be_hashed = strcat(to_be_hashed, new_msg->message);
+    printf("Pre hash: %s \nPost hash: %d\n", to_be_hashed, hash(to_be_hashed));
+
+    // Absolutely cooked way of hashing it but sure
+    new_msg->unique_hash = hash(to_be_hashed); // Used for identifying unique messages
 
     // Write messages to device 
     ssize_t bytes_written = write(fd, new_msg, total_message_size); //writes the message  to device
@@ -77,9 +110,7 @@ int main(int argc, char *argv[]) {
     if (bytes_written < 0) {
         perror("Write failed");
     } else {
-        time_t t;
-        time(&t);
-        printf("Data written to device: %zu bytes\nTime created/written: %s \nProcessID: %d \n", bytes_written, ctime(&t), getpid());
+        printf("Data written to device successfully.");
     }
 
     close(fd); 

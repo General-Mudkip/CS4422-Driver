@@ -24,10 +24,15 @@
 char buffer[4096]; //shared buffer for data read from device
 
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared buffer
-
 pthread_cond_t data_available = PTHREAD_COND_INITIALIZER; // conditional variable for when data is avaliable
 
 int string_size;
+
+// Array to store unique hash values of messages, preventing duplication
+// idk what word to use other than exhausted
+int64_t exhausted_hashes[100]; 
+int hash_count = 0;
+pthread_mutex_t hash_check_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared buffer
 
 //IOCTL
 void get_device_info(int fd) {
@@ -50,31 +55,56 @@ Lecture 8, Lecture 9, Lecture 10
 
 /* https://medium.com/@joshuaudayagiri/linux-system-calls-read-a9ce7ed33827 */
 
+void initialise_hash_array() {
+    for (int i = 0; i < 100; i++) {
+        exhausted_hashes[i] = -1;  // Use -1 as "empty" marker
+    }
+}
+
+int has_seen_hash(int64_t hash_to_check) {
+    pthread_mutex_lock(&hash_check_mutex); 
+    for (int i = 0; i < 100; i++) { // 100 = length of exhausted_hashes
+        // If the hash is found in the array, return 1
+        if (exhausted_hashes[i] == hash_to_check) {
+            printf("Read message with hash: %ld\n", ((struct message_data*)buffer)->unique_hash);
+            pthread_mutex_unlock(&hash_check_mutex); 
+            return 1;  // Message has already been printed
+        }
+    }
+
+    // If we haven't returned yet, it meens the hash hasn't been seen
+    exhausted_hashes[hash_count] = hash_to_check; // Add the hash to the array
+    hash_count++;
+
+    if (hash_count == 100) {
+        hash_count = 0; // Reset the array
+    }
+
+    pthread_mutex_unlock(&hash_check_mutex); 
+    return 0;  // Hash not seen before
+}
+
+// Parent thread continuously reads data from the device
 // Parent thread continuously reads data from the device
 void* reader_thread(void* arg) {
     int fd = open(DEVICE_PATH, O_RDONLY);
-
     if (fd == -1) {
         perror("Failed to open device");
         return NULL;
     }
 
     while (1) {
-
         ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
 
-        if (bytes_read == -1) {
-            perror("Failed to read");
-            break;
-        }
-        
         if (bytes_read > 0) {
-            ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-            buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
+            struct message_data* msg = (struct message_data*)buffer;
+            printf("Received message with hash: %ld\n", msg->unique_hash);
 
-            pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
-            pthread_cond_signal(&data_available); //signals other threads 
-            pthread_mutex_unlock(&buffer_mutex); //
+            if (!has_seen_hash(msg->unique_hash)) {
+                pthread_mutex_lock(&buffer_mutex);
+                pthread_cond_broadcast(&data_available);
+                pthread_mutex_unlock(&buffer_mutex);
+            }
         }
 
         sleep(1);
@@ -99,20 +129,19 @@ void set_shm_size(int new_size) {
 
 
 // Console writer thread prints data to console
+// Console writer thread prints data to console
 void* console_writer_thread(void* arg) {
     while (1) {
         pthread_mutex_lock(&buffer_mutex);
-        pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-        // Cast the raw buffer to the message_data struct
+        pthread_cond_wait(&data_available, &buffer_mutex);
+
         struct message_data* msg = (struct message_data*)buffer;
-        printf(
-            "|| Console | %d | Writer PID: %d || %s\n",
-            msg->timestamp, msg->writer_pid, msg->message
-        );
+
+        printf("|| Console | %d | Writer PID: %d || %s\n",
+               msg->timestamp, msg->writer_pid, msg->message);
 
         pthread_mutex_unlock(&buffer_mutex);
     }
-
     return NULL;
 }
 
@@ -131,6 +160,7 @@ void* log_writer_thread(void* arg) {
         pthread_cond_wait(&data_available, &buffer_mutex);  
 
         struct message_data* msg = (struct message_data*)buffer;
+
         fprintf(
             log_file,
             "|| Log | %d | Writer PID: %d || %s\n",
@@ -149,6 +179,7 @@ void* log_writer_thread(void* arg) {
 }
 
 int main(int argc, char* argv[]) {
+    initialise_hash_array(); // Initialise the hash array
     // takes input from the console to set the shm. example: sudo ./reader 1024
     if (argc == 2) {
         int new_size = atoi(argv[1]); //converts from string to int

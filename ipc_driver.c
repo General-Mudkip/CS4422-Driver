@@ -317,7 +317,6 @@ static long string_to_int(const char* str) {
 static ssize_t device_read(struct file *file, char __user *user_buffer, size_t len, loff_t *offset) {
     size_t bytes_to_read = min(len, shm_size);
 
-
     //update proc file stats
     userspace_accesses++;
     reads_count++;
