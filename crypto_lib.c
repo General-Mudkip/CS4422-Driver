@@ -1,4 +1,4 @@
-//Requires 'shared_mem' which it will read/encrypt
+// Requires 'shared_mem' which it will read/encrypt
 
 // Function that uses modular exponentiation to compute (base^exp) % mod
 // Basically, raises 'base' to the power of 'exp' under modulo 'mod' efficiently.
