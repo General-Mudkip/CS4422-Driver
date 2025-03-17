@@ -10,7 +10,6 @@
 #include <linux/cdev.h> // registering character devices
 #include <linux/proc_fs.h>  // for proc_create and remove_proc_entry
 #include <linux/ioctl.h> // for the ioctl commands
-#include "message.h"
 
 #define DEVICE_NAME "Simple IPC" 
 #define MAJOR_DEVICE_NUMBER 42
@@ -43,7 +42,6 @@ static char decrypted_mem[SHM_SIZE] = {0};  // holds decrypted data
 
 static char *shared_mem;
 static int data_written = 0;
-static int readers_remaining = 3;
 
 static struct proc_dir_entry *proc_file;
 
@@ -321,7 +319,6 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
     userspace_accesses++;
     reads_count++;
 
-
     if (data_written == 0) { // check for data
         // printk(KERN_INFO "No data available to read\n");
         return 0; 
@@ -338,7 +335,6 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
 
     printk(KERN_INFO "Reader acquired semaphore\n");
 
-
     if (copy_to_user(user_buffer, shared_mem, bytes_to_read)) { 
         printk(KERN_ERR "Failed to copy data to user space\n");
         up(&rw_sem);  // to ensure its released or else it gets stuck
@@ -346,14 +342,6 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
     }
 
     printk(KERN_INFO "Device read %zu bytes\n", bytes_to_read); // log device logging upon read
-
-    // readers now read in cycles hence decrement after finish reading
-    readers_remaining--; 
-
-    if (readers_remaining <= 0) {  
-        data_written = 0;  // reset only after all readers have read
-        readers_remaining = 3;  // reset for the next read cycle
-    }
 
     up(&rw_sem);
     printk(KERN_INFO "Reader released semaphore\n");;
@@ -376,7 +364,7 @@ static long long mod_exp(long long base, long long exp, long long mod) {
 
 
 // Encrypt whatever is currently in shared memory
-static int encrypt_shared_memory(void) {
+static int __encrypt_shared_memory(void) {
     if (!shared_mem || data_written == 0) { // Check if there's anything to encrypt
         printk(KERN_ERR "No data available in shared memory for encryption\n");
         return -EINVAL;
@@ -418,8 +406,8 @@ static int encrypt_shared_memory(void) {
 // Write
 static ssize_t device_write(struct file *file, const char __user *user_buffer, size_t len, loff_t *offset) {
     size_t bytes_to_write = min(len, shm_size);
-    
-     if (len > max_written) {
+
+    if (len > max_written) {
         max_written = len;   // update if current read is more than previous max
     }
 
@@ -451,8 +439,7 @@ static ssize_t device_write(struct file *file, const char __user *user_buffer, s
     data_written = 1;
 
     // encrypt data
-    encrypt_shared_memory();
-  
+    __encrypt_shared_memory();
 
     printk(KERN_INFO "Device wrote %zu bytes\n", bytes_to_write);
 
