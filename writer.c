@@ -8,6 +8,7 @@
 #include <string.h>  // String manipulation
 #include <sys/ioctl.h> // For accessing ioctl shtuff
 #include<time.h> //for readable time
+#include "message.h"
 
 #define DEVICE_PATH "/dev/ipc_device"
 
@@ -50,9 +51,29 @@ int main(int argc, char *argv[]) {
 
     /* https://www.quora.com/How-does-the-write-function-work-in-C-Can-you-explain-this-function */
 
+    size_t message_length = strlen(argv[1]); //Length of the message string
+    size_t total_message_size = sizeof(struct message_data) + message_length; //Size of the message struct with metadata
+
+    struct message_data *new_msg = malloc(total_message_size);
+    if (!new_msg) {
+        perror("Failed to allocate memory for message");
+        close(fd);
+        return -1;
+    }
+
+    // Set la data in the struct (`->` automatically dereferences the pointer)
+    new_msg->writer_pid = getpid(); // Process ID of the writer
+    new_msg->timestamp = time(NULL); // When the message was created
+    new_msg->message_length = message_length; // Length of the actual message's content
+    // Just copies the message passed in as the argument to the memory location
+    // opf the message in the struct
+    memcpy(new_msg->message, argv[1], message_length);
+
+    printf("message: %s\n", new_msg->message);
+
     // Write messages to device 
-    ssize_t bytes_written = write(fd, argv[1], strlen(argv[1])); //writes the message (argv[1]) to device
-    
+    ssize_t bytes_written = write(fd, new_msg, total_message_size); //writes the message  to device
+
     if (bytes_written < 0) {
         perror("Write failed");
     } else {

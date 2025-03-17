@@ -11,6 +11,7 @@
 #include <pthread.h>  // Threading
 #include <string.h>   // String manipulation
 #include <sys/ioctl.h> //for ioctl
+#include "message.h"
 
 #define IOCTL_GET_SHM_SIZE _IOR(42, 0, int)
 #define IOCTL_SET_SHM_SIZE _IOW(42, 1, int)
@@ -20,7 +21,7 @@
 #define DEVICE_PATH "/dev/ipc_device"
 #define LOG_FILE_PATH "/tmp/reader_log.txt" // macro for path to log file
 
-char buffer[1024]; //shared buffer for data read from device
+char buffer[4096]; //shared buffer for data read from device
 
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex for shared buffer
 
@@ -69,7 +70,6 @@ void* reader_thread(void* arg) {
         
         if (bytes_read > 0) {
             ioctl(fd, IOCTL_GET_CURRENT_BUFFER_SIZE, &string_size);
-            printf("Read bytes: %d \n", string_size);
             buffer[bytes_read] = '\0';  // null-terminate buffer, prevent garbage data
 
             pthread_mutex_lock(&buffer_mutex); //restricts access to buffer
@@ -103,8 +103,12 @@ void* console_writer_thread(void* arg) {
     while (1) {
         pthread_mutex_lock(&buffer_mutex);
         pthread_cond_wait(&data_available, &buffer_mutex);  // waits for condition variable to be signaled
-        printf("| Console | Data read from device: %s\n", buffer);
-        printf("Process ID: %d \nParent Process ID %d \n", getpid(), getppid());
+        // Cast the raw buffer to the message_data struct
+        struct message_data* msg = (struct message_data*)buffer;
+        printf(
+            "| Console | %d s | Writer PID: %D | %s\n",
+            msg->timestamp, msg->writer_pid, msg->message
+        );
 
         pthread_mutex_unlock(&buffer_mutex);
     }
@@ -126,7 +130,12 @@ void* log_writer_thread(void* arg) {
         pthread_mutex_lock(&buffer_mutex); 
         pthread_cond_wait(&data_available, &buffer_mutex);  
 
-        fprintf(log_file, "| Log | Data read from device: %s\n", buffer);
+        struct message_data* msg = (struct message_data*)buffer;
+        fprintf(
+            log_file,
+            "| Log | %d s | Writer PID: %D | %s\n",
+            msg->timestamp, msg->writer_pid, msg->message
+        );
 
         /* https://how.dev/answers/what-is-fflush-in-c */
 
@@ -144,13 +153,14 @@ int main(int argc, char* argv[]) {
     if (argc == 2) {
         int new_size = atoi(argv[1]); //converts from string to int
         set_shm_size(new_size); //callin ioctl to set custom shm
-    }  
+    }
 
     pthread_t reader_tid, console_writer_tid, log_writer_tid; //thread identifiers
 
     // Start the threads
     //Reader
-    if (pthread_create(&reader_tid, NULL, reader_thread, NULL) != 0) { // creating thraeds with default attributes and args
+    //// creating threads with default attributes and args
+    if (pthread_create(&reader_tid, NULL, reader_thread, NULL) != 0) { 
         perror("Failed to create reader thread");
         return -1;
     }

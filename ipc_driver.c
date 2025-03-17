@@ -10,6 +10,7 @@
 #include <linux/cdev.h> // registering character devices
 #include <linux/proc_fs.h>  // for proc_create and remove_proc_entry
 #include <linux/ioctl.h> // for the ioctl commands
+#include "message.h"
 
 #define DEVICE_NAME "Simple IPC" 
 #define MAJOR_DEVICE_NUMBER 42
@@ -18,7 +19,7 @@
 
 #define PROC_FILENAME "ipc_stats"
 
-#define MAX_READER_COUNT 4 // The maximum amount of readers at any one time
+#define MAX_READER_COUNT 4 // The maximum amount of readers at any one time (arbitrary)
 
 // https://embetronicx.com/tutorials/linux/device-drivers/ioctl-tutorial-in-linux/
 #define IOCTL_GET_SHM_SIZE _IOR(MAJOR_DEVICE_NUMBER, 0, int) // get shared memory (/buffer) size
