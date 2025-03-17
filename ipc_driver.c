@@ -262,7 +262,8 @@ static long long mod_inverse(long long e, long long phi) {
     return (t < 0) ? t + phi : t; // Make sure result is positive
 }
 // Decrypt whatever is currently stored in encrypted_mem
-static int decrypt_shared_memory(void) {
+static int __decrypt_shared_memory(void) {
+    // Don't need to lock the data as we already have the semaphore lock when this is called
     if (strlen(encrypted_mem) == 0) { // Nothing to decrypt
         printk(KERN_ERR "No encrypted data available to decrypt\n");
         return -EINVAL;
@@ -291,6 +292,26 @@ static int decrypt_shared_memory(void) {
     return 0; // Decryption done
 }
 
+// Generates the keys for RSA encryption
+static long string_to_int(const char* str) {
+    long result = 0;
+    int len = strlen(str);
+
+    // iterate through each character in the provide password
+    for (int i = 0; i < len; i++) {
+        // Wonky stuff but basically shifts the current int left by 8 bits (length
+        // of a char) and then "appends" the current char to the end of the int,
+        // since OR'ing the 8 0's with the new character results in the new character
+        //
+        // In order to convert the character to a number, we cast it to an unsigned char
+        result = (result << 8) | (unsigned char)str[i];
+    }
+
+    // Ideally we should check if the number is prime, but it's fine for a simple
+    // password hashing function
+    return result;
+}
+
 // Read
 static ssize_t device_read(struct file *file, char __user *user_buffer, size_t len, loff_t *offset) {
     size_t bytes_to_read = min(len, shm_size);
@@ -312,8 +333,9 @@ static ssize_t device_read(struct file *file, char __user *user_buffer, size_t l
         return -EINTR;
     }
 
-    //encrypt data
-    decrypt_shared_memory();
+    // Don't need to lock the data as we already have the semaphore lock
+    // decrypt data
+    __decrypt_shared_memory();
 
     printk(KERN_INFO "Reader acquired semaphore\n");
 
