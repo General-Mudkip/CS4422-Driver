@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     } else {
         time_t t;
         time(&t);
-        printf("Data written to device: %zu bytes\nTime created/written: %s ProcessID: %d \n", bytes_written, ctime(&t), getpid());
+        printf("Data written to device: %zu bytes\nTime created/written: %s \nProcessID: %d \n", bytes_written, ctime(&t), getpid());
     }
 
     close(fd); 
